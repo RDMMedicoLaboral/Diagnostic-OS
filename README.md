@@ -1,4 +1,4 @@
-# Diagnostic OS — Frontend (Fase 1)
+# Diagnostic OS — Frontend (Fase 1) 
 
 Prototipo de frontend para **Diagnostic OS**, una aplicación de laboratorio clínico
 multi-tenant con módulos de Laboratorio e Imágenes (RX y Ecografía), pensada para
