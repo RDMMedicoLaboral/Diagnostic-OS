@@ -36,6 +36,11 @@ export default function PlatformAdminView({
   const [editingTenantName, setEditingTenantName] = useState(null);
   const [tenantNameDraft, setTenantNameDraft] = useState("");
 
+  const [resettingUser, setResettingUser] = useState(null); // usuario al que se le está restableciendo la contraseña
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [resetDone, setResetDone] = useState(false);
+
   const interopTenant = tenants.find((t) => t.id === interopTenantId);
   const interopStudies = allStudies.filter((s) => s.tenantId === interopTenantId);
   const interopOrders = allOrders.filter((o) => o.tenantId === interopTenantId);
@@ -97,6 +102,23 @@ export default function PlatformAdminView({
   const saveTenantName = (tenantId) => {
     if (tenantNameDraft.trim()) onUpdateTenant(tenantId, { name: tenantNameDraft.trim() });
     setEditingTenantName(null);
+  };
+
+  const startResetPassword = (u) => {
+    setResettingUser(u);
+    setResetPassword("");
+    setResetError("");
+    setResetDone(false);
+  };
+
+  const submitResetPassword = () => {
+    if (!resetPassword.trim() || resetPassword.trim().length < 4) {
+      setResetError("La contraseña debe tener al menos 4 caracteres.");
+      return;
+    }
+    onUpdateUser(resettingUser.id, { password: resetPassword.trim() });
+    setResetError("");
+    setResetDone(true);
   };
 
   return (
@@ -182,7 +204,7 @@ export default function PlatformAdminView({
                         <span className={`dos-pill dos-pill-${ROLE_META[u.role]?.color || "teal"}`}>{ROLE_META[u.role]?.label || u.role}</span>
                         <div className="dos-user-row-actions">
                           <button className="dos-btn dos-btn-ghost dos-btn-sm" onClick={() => startEditUser(u)}><Icon name="Pencil" size={13} /></button>
-                          <button className="dos-btn dos-btn-ghost dos-btn-sm" onClick={() => startEditUser(u)}><Icon name="KeyRound" size={13} /></button>
+                          <button className="dos-btn dos-btn-ghost dos-btn-sm" onClick={() => startResetPassword(u)} title="Restablecer contraseña"><Icon name="KeyRound" size={13} /></button>
                         </div>
                       </div>
                     ))
@@ -295,6 +317,39 @@ export default function PlatformAdminView({
             <div className="dos-modal-footer">
               <button className="dos-btn" onClick={() => setEditingUser(null)}>Cancelar</button>
               <button className="dos-btn dos-btn-primary" onClick={submitEditUser}>Guardar cambios</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* --- Modal: restablecer contraseña --- */}
+      {resettingUser && (
+        <div className="dos-overlay" onClick={() => setResettingUser(null)}>
+          <div className="dos-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="dos-modal-header"><h3>Restablecer contraseña</h3><button className="dos-btn dos-btn-ghost dos-btn-sm" onClick={() => setResettingUser(null)}><Icon name="X" size={15} /></button></div>
+            <div className="dos-modal-body">
+              {resetDone ? (
+                <p style={{ fontSize: 13.5 }}>
+                  Listo — la contraseña de <strong>{resettingUser.name}</strong> ({resettingUser.email}) se actualizó. Compártesela por un canal seguro.
+                </p>
+              ) : (
+                <>
+                  <p style={{ fontSize: 13, color: "var(--ink-dim)", marginTop: 0 }}>
+                    Nueva contraseña para <strong>{resettingUser.name}</strong> ({resettingUser.email}).
+                  </p>
+                  <div className="dos-field"><label>Nueva contraseña</label><input type="password" value={resetPassword} onChange={(e) => setResetPassword(e.target.value)} placeholder="Mínimo 4 caracteres" onKeyDown={(e) => e.key === "Enter" && submitResetPassword()} autoFocus /></div>
+                  {resetError && <div style={{ color: "var(--red)", fontSize: 12.5 }}>{resetError}</div>}
+                </>
+              )}
+            </div>
+            <div className="dos-modal-footer">
+              {resetDone ? (
+                <button className="dos-btn dos-btn-primary" onClick={() => setResettingUser(null)}>Cerrar</button>
+              ) : (
+                <>
+                  <button className="dos-btn" onClick={() => setResettingUser(null)}>Cancelar</button>
+                  <button className="dos-btn dos-btn-primary" onClick={submitResetPassword}>Restablecer</button>
+                </>
+              )}
             </div>
           </div>
         </div>

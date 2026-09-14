@@ -229,6 +229,14 @@ export default function App() {
     showToast(`Estudio "${service.name}" agregado al catálogo`);
   };
 
+  const importCatalogItems = (items) => {
+    if (!items.length) { showToast("No había ningún estudio para importar"); return; }
+    const newServices = items.map((it) => ({ id: uid("SVC"), tenantId: currentTenantId, active: true, externalCodes: [], ...it }));
+    setCatalog((prev) => [...newServices, ...prev]);
+    logAudit("catalog.import", "CatalogItem", null, { count: newServices.length });
+    showToast(`${newServices.length} estudio(s) importado(s) al catálogo`);
+  };
+
   const updateTenantHours = (hours) => setTenant((prev) => (prev ? { ...prev, hours } : prev));
 
   // --- Centro de integraciones ---
@@ -345,6 +353,7 @@ export default function App() {
               onUpdatePrice={updateCatalogPrice}
               onToggleActive={toggleCatalogActive}
               onAddService={addCatalogService}
+              onImportCatalog={importCatalogItems}
             />
           )}
           {view === "agenda" && <AgendaView appointments={appointments} onImportAppointment={importAppointment} onRefresh={refresh} />}
