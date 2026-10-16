@@ -9,6 +9,9 @@ const FIXED_CONNECTORS = [
   { id: "agenda", name: "Sistema de agendamiento (propio)", type: "Agenda", protocol: "REST", status: "Conectado", icon: "CalendarClock" },
 ];
 
+const HELP = { display: "block", marginTop: 4, fontSize: 11.5, color: "var(--ink-faint)", lineHeight: 1.4 };
+const TYPE_LABELS = { HCE: "HCE — historia clínica", HIS: "HIS — sistema hospitalario", LIS: "LIS — laboratorio", RIS: "RIS — imágenes", PACS: "PACS — almacén de imágenes" };
+
 const DEFAULT_THIRD_PARTY = {
   name: "Conector de terceros", type: "HIS / LIS / RIS / PACS", protocol: "A definir por contrato", baseUrl: "", apiKey: "", status: "No configurado",
   authType: "apikey", tokenUrl: "", clientId: "", clientSecret: "", scope: "system/DiagnosticReport.write",
@@ -36,6 +39,7 @@ export default function InteropView({ studies, orders, patients, diagnosticRepor
   const [editingConnector, setEditingConnector] = useState(false);
   const thirdParty = connectorOfTenant(tenant);
   const [connForm, setConnForm] = useState(thirdParty);
+  const [preset, setPreset] = useState("custom");
   const [testResult, setTestResult] = useState(null);
   const [newKey, setNewKey] = useState(null);
   const [busy, setBusy] = useState("");
@@ -54,7 +58,12 @@ export default function InteropView({ studies, orders, patients, diagnosticRepor
     else if (resourceKind === "imagingStudy" && selectedStudy.modality !== "LAB") json = studyToImagingStudy(selectedStudy, selectedPatient.id);
   }
 
-  const startEdit = () => { setConnForm(thirdParty); setTestResult(null); setNewKey(null); setNotice(""); setEditingConnector(true); };
+  const applyPreset = (value) => {
+    setPreset(value);
+    if (value === "clinicos") setConnForm((f) => ({ ...f, name: "Clinic-OS", type: "HCE", protocol: "FHIR R4", authType: "oauth2", scope: "system/DiagnosticReport.write" }));
+    if (value === "apikey") setConnForm((f) => ({ ...f, type: f.type || "HIS", protocol: "FHIR R4", authType: "apikey" }));
+  };
+  const startEdit = () => { setPreset(thirdParty.authType === "oauth2" ? "clinicos" : "custom"); setConnForm(thirdParty); setTestResult(null); setNewKey(null); setNotice(""); setEditingConnector(true); };
   const saveConnector = () => {
     const status = connForm.baseUrl?.trim() ? "Conectado" : "No configurado";
     const patch = {
@@ -102,13 +111,39 @@ export default function InteropView({ studies, orders, patients, diagnosticRepor
         ))}
         {canEditConnectors && editingConnector && (
           <div className="dos-connector-edit">
-            <div className="dos-field-row">
-              <div className="dos-field"><label>Nombre del sistema externo</label><input value={connForm.name} onChange={(e) => setConnForm({ ...connForm, name: e.target.value })} placeholder="Ej. Clinic-OS" /></div>
-              <div className="dos-field"><label>Protocolo</label><input value={connForm.protocol} onChange={(e) => setConnForm({ ...connForm, protocol: e.target.value })} placeholder="FHIR R4" /></div>
+            <div className="dos-field" style={{ maxWidth: 420 }}>
+              <label>1. ¿A qué sistema te vas a conectar?</label>
+              <select value={preset} onChange={(e) => applyPreset(e.target.value)}>
+                <option value="custom">— Elegir —</option>
+                <option value="clinicos">Clinic-OS (recomendado: llena todo automáticamente)</option>
+                <option value="apikey">Otro sistema FHIR con clave de API</option>
+              </select>
+              <small style={HELP}>Si eliges Clinic-OS solo te faltará la URL, el Client ID y el Client secret.</small>
             </div>
             <div className="dos-field-row">
-              <div className="dos-field"><label>Tipo</label><input value={connForm.type} onChange={(e) => setConnForm({ ...connForm, type: e.target.value })} placeholder="HCE / HIS / LIS / RIS / PACS" /></div>
-              <div className="dos-field"><label>URL base FHIR (a donde enviamos los informes)</label><input value={connForm.baseUrl} onChange={(e) => setConnForm({ ...connForm, baseUrl: e.target.value })} placeholder="https://clinic-os.ejemplo.com/api/fhir" /></div>
+              <div className="dos-field">
+                <label>Nombre del sistema (solo es una etiqueta)</label>
+                <input autoComplete="off" name="dx-conn-name" value={connForm.name} onChange={(e) => setConnForm({ ...connForm, name: e.target.value })} placeholder="Ej. Clinic-OS" />
+              </div>
+              <div className="dos-field">
+                <label>Tipo de sistema</label>
+                <select value={connForm.type} onChange={(e) => setConnForm({ ...connForm, type: e.target.value })}>
+                  {[...new Set([connForm.type, "HCE", "HIS", "LIS", "RIS", "PACS"])].filter(Boolean).map((t) => <option key={t} value={t}>{TYPE_LABELS[t] || t}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="dos-field-row">
+              <div className="dos-field">
+                <label>Protocolo</label>
+                <select value={connForm.protocol} onChange={(e) => setConnForm({ ...connForm, protocol: e.target.value })}>
+                  {[...new Set([connForm.protocol, "FHIR R4"])].filter(Boolean).map((t) => <option key={t} value={t}>{t === "FHIR R4" ? "FHIR R4 (el único que se envía hoy)" : t}</option>)}
+                </select>
+              </div>
+              <div className="dos-field">
+                <label>2. URL base FHIR de ese sistema</label>
+                <input autoComplete="off" name="dx-conn-url" inputMode="url" value={connForm.baseUrl} onChange={(e) => setConnForm({ ...connForm, baseUrl: e.target.value })} placeholder="https://clinic-os.ejemplo.com/api/fhir" />
+                <small style={HELP}>Debe empezar con https:// y terminar en /api/fhir (sin /DiagnosticReport). Si el navegador te rellena aquí un correo, bórralo.</small>
+              </div>
             </div>
             <div className="dos-field" style={{ maxWidth: 360 }}>
               <label>Cómo nos autenticamos ante ese sistema</label>
@@ -116,16 +151,17 @@ export default function InteropView({ studies, orders, patients, diagnosticRepor
                 <option value="oauth2">OAuth2 client_credentials (Clinic-OS)</option>
                 <option value="apikey">Clave de API fija</option>
               </select>
+              <small style={HELP}>{connForm.authType === "oauth2" ? "Clinic-OS te da un Client ID y un Client secret al crear la integración." : "Una clave única que el otro sistema te entrega."}</small>
             </div>
             {connForm.authType === "oauth2" ? (
               <>
                 <div className="dos-field-row">
-                  <div className="dos-field"><label>Client ID</label><input value={connForm.clientId} onChange={(e) => setConnForm({ ...connForm, clientId: e.target.value })} placeholder="El que te dio Clinic-OS al crear la integración" /></div>
+                  <div className="dos-field"><label>Client ID</label><input autoComplete="off" name="dx-conn-client-id" value={connForm.clientId} onChange={(e) => setConnForm({ ...connForm, clientId: e.target.value })} placeholder="El que te dio Clinic-OS al crear la integración" /></div>
                   <div className="dos-field"><label>Client secret</label><input type="password" autoComplete="new-password" value={connForm.clientSecret} onChange={(e) => setConnForm({ ...connForm, clientSecret: e.target.value })} placeholder={thirdParty.clientSecretSet ? "•••••• guardado (déjalo vacío para conservarlo)" : "Se muestra una sola vez en Clinic-OS"} /></div>
                 </div>
                 <div className="dos-field-row">
-                  <div className="dos-field"><label>URL del token (opcional)</label><input value={connForm.tokenUrl} onChange={(e) => setConnForm({ ...connForm, tokenUrl: e.target.value })} placeholder="Vacío = {URL base}/oauth/token" /></div>
-                  <div className="dos-field"><label>Scope</label><input value={connForm.scope} onChange={(e) => setConnForm({ ...connForm, scope: e.target.value })} /></div>
+                  <div className="dos-field"><label>URL del token (opcional)</label><input autoComplete="off" name="dx-conn-token-url" value={connForm.tokenUrl} onChange={(e) => setConnForm({ ...connForm, tokenUrl: e.target.value })} placeholder="Vacío = {URL base}/oauth/token" /></div>
+                  <div className="dos-field"><label>Scope</label><input autoComplete="off" name="dx-conn-scope" value={connForm.scope} onChange={(e) => setConnForm({ ...connForm, scope: e.target.value })} /></div>
                 </div>
               </>
             ) : (
