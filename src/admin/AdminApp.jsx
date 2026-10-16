@@ -105,6 +105,25 @@ export default function AdminApp() {
     } catch (err) { setDataError(err.message); }
   };
 
+  const reloadSnapshot = async (tenantId) => setSnapshot(await api.get(`/api/admin/tenants/${tenantId}/snapshot`));
+
+  // Conexión con el sistema externo (HCE / Clinic-OS). Los errores se devuelven al panel de
+  // integraciones, que los muestra junto al botón que los provocó.
+  const testConnection = (tenantId) => api.post(`/api/admin/tenants/${tenantId}/integrations/test`);
+  const generateInboundKey = async (tenantId) => {
+    const r = await api.post(`/api/admin/tenants/${tenantId}/integrations/inbound-key`);
+    await loadTenantsAndUsers(); // para que el panel sepa que ya hay una clave activa
+    return r;
+  };
+  const retryMessage = async (tenantId, messageId) => {
+    try { return await api.post(`/api/admin/tenants/${tenantId}/integrations/messages/${messageId}/retry`); }
+    finally { await reloadSnapshot(tenantId); }
+  };
+  const sendReport = async (tenantId, reportId) => {
+    try { return await api.post(`/api/admin/tenants/${tenantId}/integrations/reports/${reportId}/send`); }
+    finally { await reloadSnapshot(tenantId); }
+  };
+
   if (!adminUser) {
     return (
       <div className="dos-root">
@@ -161,6 +180,10 @@ export default function AdminApp() {
         allDiagnosticReports={snapshot.diagnosticReports}
         allIntegrationMessages={snapshot.integrationMessages}
         onSimulate={simulateIntegration}
+        onTestConnection={testConnection}
+        onGenerateInboundKey={generateInboundKey}
+        onRetryMessage={retryMessage}
+        onSendReport={sendReport}
         onLogout={handleLogout}
         onCreateTenant={platformCreateTenant}
         onAddUser={platformAddUser}

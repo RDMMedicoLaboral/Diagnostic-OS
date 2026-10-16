@@ -13,6 +13,7 @@ export default function PlatformAdminView({
   tenants, allUsers, activeUser,
   allOrders, allStudies, allPatients, allDiagnosticReports, allIntegrationMessages,
   onSimulate, onLogout,
+  onTestConnection, onGenerateInboundKey, onRetryMessage, onSendReport,
   onCreateTenant, onAddUser, onUpdateUser, onUpdateTenant,
   interopTenantId: interopTenantIdProp, onInteropTenantChange,
 }) {
@@ -235,6 +236,10 @@ export default function PlatformAdminView({
                 tenant={interopTenant}
                 canEditConnectors
                 onUpdateConnector={(patch) => onUpdateTenant(interopTenantId, { thirdPartyConnector: patch })}
+                onTestConnection={onTestConnection ? () => onTestConnection(interopTenantId) : undefined}
+                onGenerateInboundKey={onGenerateInboundKey ? () => onGenerateInboundKey(interopTenantId) : undefined}
+                onRetryMessage={onRetryMessage ? (messageId) => onRetryMessage(interopTenantId, messageId) : undefined}
+                onSendReport={onSendReport ? (reportId) => onSendReport(interopTenantId, reportId) : undefined}
               />
             ) : (
               <div className="dos-empty"><Icon name="Building2" size={26} /><div>Todavía no hay centros registrados en la plataforma.</div></div>

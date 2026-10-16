@@ -61,6 +61,7 @@ export const INTEGRATION_STATUSES = {
   duplicate: { label: "Duplicado / ignorado", tone: "coral" },
   failed: { label: "Error", tone: "red" },
   retrying: { label: "Reintentando", tone: "amber" },
+  skipped: { label: "No enviado", tone: "coral" },
 };
 
 export const PRIORITIES = {

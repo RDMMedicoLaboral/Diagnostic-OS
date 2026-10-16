@@ -17,6 +17,7 @@ import AuditView from "./components/AuditView.jsx";
 import NewOrderModal from "./components/modals/NewOrderModal.jsx";
 import StudyDetailModal from "./components/modals/StudyDetailModal.jsx";
 import { useRemoteData } from "./hooks/useRemoteData.js";
+import { api } from "./lib/api.js";
 import { uid, nowISO } from "./lib/format.js";
 import { ROLE_META, PERMISSIONS } from "./data/catalogs.js";
 import { CONTRACT_TYPES } from "./data/contracts.js";
@@ -51,7 +52,7 @@ export default function App() {
     appointments, setAppointments,
     integrationMessages, setIntegrationMessages: setMessages,
     auditEvents, setAuditEvents: setAudit,
-    loaded, refresh, syncError,
+    loaded, refresh, refreshIfIdle, syncError,
   } = useRemoteData();
 
   const [view, setView] = useState("dashboard");
@@ -192,19 +193,27 @@ export default function App() {
 
   const publishReport = () => {
     setReports((prev) => prev.map((r) => (r.id === openStudy?.reportId ? { ...r, status: "published", publishedAt: nowISO() } : r)));
-    const msg = createIntegrationMessage({ tenantId: currentTenantId, type: CONTRACT_TYPES.REPORT_PUBLISHED, direction: "outbound", source: "Diagnostic OS", destination: "HCE-Ecosistema", status: "acknowledged", payloadSummary: `DiagnosticReport ${openStudy?.reportId} — ${openPatient ? `${openPatient.firstName} ${openPatient.lastName}` : ""}` });
-    setMessages((prev) => [msg, ...prev]);
     logAudit("report.publish", "DiagnosticReport", openStudy?.reportId, { status: "published" });
     setPulseKey((k) => k + 1);
-    showToast("Informe publicado y enviado a HCE-Ecosistema");
+    // El envío al sistema conectado lo hace el SERVIDOR al guardarse la publicación y deja su propio
+    // registro (con reintentos si falla). Antes aquí se inventaba un mensaje "enviado" aunque no se enviara nada.
+    showToast("Informe publicado");
     setOpenStudyId(null);
+    setTimeout(() => refreshIfIdle().catch(() => {}), 4000); // trae el estado real del envío
   };
 
-  const shareAgain = () => {
-    const msg = createIntegrationMessage({ tenantId: currentTenantId, type: CONTRACT_TYPES.REPORT_PUBLISHED, direction: "outbound", source: "Diagnostic OS", destination: "HCE-Ecosistema", status: "acknowledged", payloadSummary: `Reenvío DiagnosticReport ${openStudy?.reportId}` });
-    setMessages((prev) => [msg, ...prev]);
-    setPulseKey((k) => k + 1);
-    showToast("Informe reenviado");
+  const shareAgain = async () => {
+    const reportId = openStudy?.reportId;
+    if (!reportId) return;
+    try {
+      const r = await api.post(`/api/reports/${reportId}/resend`);
+      setPulseKey((k) => k + 1);
+      if (r.status === "skipped") showToast("No se envió: el informe no corresponde a una orden del sistema conectado");
+      else showToast(r.ok ? "Informe reenviado al sistema conectado" : `No se pudo reenviar${r.error ? `: ${r.error}` : ""}`);
+      refresh().catch(() => {});
+    } catch (err) {
+      showToast(err.message);
+    }
   };
 
   const amendReport = (reason) => {
@@ -358,7 +367,7 @@ export default function App() {
           )}
           {view === "agenda" && <AgendaView appointments={appointments} onImportAppointment={importAppointment} onRefresh={refresh} />}
           {view === "interop" && currentRole.permissions.includes(PERMISSIONS.MANAGE_INTEGRATIONS) && (
-            <InteropView studies={studies} orders={orders} patients={patients} diagnosticReports={diagnosticReports} integrationMessages={integrationMessages} onSimulate={simulateIntegration} />
+            <InteropView studies={studies} orders={orders} patients={patients} diagnosticReports={diagnosticReports} integrationMessages={integrationMessages} />
           )}
           {view === "income" && currentRole.manage && <IncomeView studies={studies} patients={patients} catalog={catalog} diagnosticReports={diagnosticReports} />}
           {view === "audit" && <AuditView auditEvents={auditEvents} />}
