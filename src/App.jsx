@@ -2,7 +2,6 @@ import { useState, useRef } from "react";
 import Icon from "./components/Icon.jsx";
 import LoginScreen from "./components/LoginScreen.jsx";
 import Sidebar from "./components/Sidebar.jsx";
-import PulseStrip from "./components/PulseStrip.jsx";
 import Dashboard from "./components/Dashboard.jsx";
 import PatientsView from "./components/PatientsView.jsx";
 import PatientDetail from "./components/PatientDetail.jsx";
@@ -31,7 +30,7 @@ const TITLES = {
   imaging: ["Imágenes", "Bandeja de estudios de imagenología"],
   catalog: ["Catálogo", "Servicios diagnósticos y tarifario del centro"],
   agenda: ["Agenda", "Citas por confirmar, propias y de la reserva en línea"],
-  interop: ["Centro de Integraciones", "Conectores, mensajes y simulador"],
+  interop: ["Centro de Integraciones", "Conexión con tu HCE y registro de mensajes"],
   income: ["Ingresos", "Cálculo automático de ingresos por estudios completados"],
   audit: ["Auditoría", "Trazabilidad de acciones clínicas y administrativas"],
   team: ["Equipo", "Colaboradores, roles y permisos del centro"],
@@ -52,14 +51,13 @@ export default function App() {
     appointments, setAppointments,
     integrationMessages, setIntegrationMessages: setMessages,
     auditEvents, setAuditEvents: setAudit,
-    loaded, refresh, refreshIfIdle, syncError,
+    connections, loaded, refresh, refreshIfIdle, syncError,
   } = useRemoteData();
 
   const [view, setView] = useState("dashboard");
   const [showNewOrder, setShowNewOrder] = useState(false);
   const [openStudyId, setOpenStudyId] = useState(null);
   const [selectedPatientId, setSelectedPatientId] = useState(null);
-  const [pulseKey, setPulseKey] = useState(0);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
@@ -194,7 +192,6 @@ export default function App() {
   const publishReport = () => {
     setReports((prev) => prev.map((r) => (r.id === openStudy?.reportId ? { ...r, status: "published", publishedAt: nowISO() } : r)));
     logAudit("report.publish", "DiagnosticReport", openStudy?.reportId, { status: "published" });
-    setPulseKey((k) => k + 1);
     // El envío al sistema conectado lo hace el SERVIDOR al guardarse la publicación y deja su propio
     // registro (con reintentos si falla). Antes aquí se inventaba un mensaje "enviado" aunque no se enviara nada.
     showToast("Informe publicado");
@@ -207,7 +204,6 @@ export default function App() {
     if (!reportId) return;
     try {
       const r = await api.post(`/api/reports/${reportId}/resend`);
-      setPulseKey((k) => k + 1);
       if (r.status === "skipped") showToast("No se envió: el informe no corresponde a una orden del sistema conectado");
       else showToast(r.ok ? "Informe reenviado al sistema conectado" : `No se pudo reenviar${r.error ? `: ${r.error}` : ""}`);
       refresh().catch(() => {});
@@ -276,35 +272,6 @@ export default function App() {
     showToast(`Orden creada desde la cita de ${appt.patientName}`);
   };
 
-  const simulateIntegration = (kind) => {
-    const lastOutbound = [...integrationMessages].find((m) => m.direction === "outbound");
-    const lastFailed = [...integrationMessages].find((m) => m.status === "failed" || m.status === "retrying");
-    if (kind === "ack" && lastOutbound) {
-      setMessages((prev) => prev.map((m) => (m.id === lastOutbound.id ? { ...m, status: "acknowledged", updatedAt: nowISO() } : m)));
-      showToast("ACK simulado recibido");
-    } else if (kind === "error") {
-      const msg = createIntegrationMessage({ tenantId: currentTenantId, type: CONTRACT_TYPES.INTEGRATION_FAILED, direction: "outbound", source: "Diagnostic OS", destination: "HCE-Ecosistema", status: "failed", payloadSummary: "Error simulado (HTTP 500)" });
-      setMessages((prev) => [msg, ...prev]);
-      showToast("Error simulado (HTTP 500)");
-    } else if (kind === "duplicate") {
-      const msg = createIntegrationMessage({ tenantId: currentTenantId, type: CONTRACT_TYPES.SERVICE_REQUEST_RECEIVED, direction: "inbound", source: "HCE-Ecosistema", destination: "Diagnostic OS", status: "duplicate", payloadSummary: "Mensaje duplicado detectado (mismo eventId) — ignorado" });
-      setMessages((prev) => [msg, ...prev]);
-      showToast("Mensaje duplicado simulado — se ignoró sin crear una segunda orden");
-    } else if (kind === "retry") {
-      if (lastFailed) {
-        setMessages((prev) => prev.map((m) => (m.id === lastFailed.id ? { ...m, status: "acknowledged", attempts: m.attempts + 1, updatedAt: nowISO() } : m)));
-        showToast("Reintento simulado — confirmado en el segundo intento");
-      } else {
-        showToast("No hay mensajes con error para reintentar");
-      }
-    } else if (kind === "disconnect") {
-      const msg = createIntegrationMessage({ tenantId: currentTenantId, type: CONTRACT_TYPES.INTEGRATION_FAILED, direction: "outbound", source: "Diagnostic OS", destination: "HCE-Ecosistema", status: "failed", payloadSummary: "Sistema externo desconectado" });
-      setMessages((prev) => [msg, ...prev]);
-      showToast("Desconexión simulada");
-    }
-    logAudit("integration.simulate", "IntegrationMessage", kind, { kind });
-  };
-
   if (!activeUser) {
     return (
       <div className="dos-root">
@@ -342,7 +309,6 @@ export default function App() {
             </div>
           </div>
         </div>
-        <PulseStrip pulseKey={pulseKey} />
         <div className="dos-content" style={{ position: "relative" }}>
           {syncError && <div style={{ background: "#7A1F1F", color: "#fff", padding: "6px 14px", fontSize: 12, borderRadius: 6, marginBottom: 10 }}>{syncError}</div>}
           {view === "dashboard" && <Dashboard patients={patients} orders={orders} studies={studies} results={results} diagnosticReports={diagnosticReports} integrationMessages={integrationMessages} currentRole={currentRole} setView={setView} />}
@@ -367,7 +333,7 @@ export default function App() {
           )}
           {view === "agenda" && <AgendaView appointments={appointments} onImportAppointment={importAppointment} onRefresh={refresh} />}
           {view === "interop" && currentRole.permissions.includes(PERMISSIONS.MANAGE_INTEGRATIONS) && (
-            <InteropView studies={studies} orders={orders} patients={patients} diagnosticReports={diagnosticReports} integrationMessages={integrationMessages} />
+            <InteropView studies={studies} orders={orders} patients={patients} diagnosticReports={diagnosticReports} integrationMessages={integrationMessages} connections={connections} />
           )}
           {view === "income" && currentRole.manage && <IncomeView studies={studies} patients={patients} catalog={catalog} diagnosticReports={diagnosticReports} />}
           {view === "audit" && <AuditView auditEvents={auditEvents} />}

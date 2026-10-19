@@ -41,12 +41,6 @@ export default function Sidebar({ view, setView, counts, tenant, activeUser, cur
           </button>
         ))}
       </div>
-      <div className="dos-sidebar-footer">
-        <div className="dos-conn">
-          <span className="dos-conn-dot" />
-          HIS Central · conectado
-        </div>
-      </div>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import Icon from "./Icon.jsx";
 import logo from "../assets/logo.png";
 import InteropView from "./InteropView.jsx";
+import ConnectionsPanel from "./ConnectionsPanel.jsx";
 import { ROLE_META } from "../data/catalogs.js";
 import { initialsOf } from "../lib/format.js";
 
@@ -12,8 +13,9 @@ const EMPTY_USER_FORM = { name: "", role: "laboratorista", email: "", password: 
 export default function PlatformAdminView({
   tenants, allUsers, activeUser,
   allOrders, allStudies, allPatients, allDiagnosticReports, allIntegrationMessages,
-  onSimulate, onLogout,
-  onTestConnection, onGenerateInboundKey, onRetryMessage, onSendReport,
+  onLogout, securityIssues = [],
+  connections = [], onCreateConnection, onUpdateConnection, onDeleteConnection, onTestConnection, onGenerateConnectionKey,
+  onRetryMessage, onSendReport,
   onCreateTenant, onAddUser, onUpdateUser, onUpdateTenant,
   interopTenantId: interopTenantIdProp, onInteropTenantChange,
 }) {
@@ -143,6 +145,20 @@ export default function PlatformAdminView({
           Esta vista existe solo para el equipo de Diagnostic OS: aquí se crean los centros clientes y sus usuarios, se administran sus contraseñas y se conectan con sistemas externos. Ningún dueño de centro tiene acceso a esta pantalla.
         </p>
 
+        {securityIssues.length > 0 && (
+          <div role="alert" style={{ border: "1px solid var(--red)", background: "var(--red-tint)", color: "var(--ink)", borderRadius: 10, padding: "12px 14px", marginBottom: 16, fontSize: 12.5, lineHeight: 1.5 }}>
+            <div style={{ fontWeight: 600, color: "var(--red)", marginBottom: 4 }}>
+              Seguridad: {securityIssues.length} cuenta{securityIssues.length === 1 ? "" : "s"} con contraseña de demostración pública
+            </div>
+            <div style={{ marginBottom: 6 }}>Esas contraseñas estaban escritas en el repositorio: cualquiera puede entrar con ellas. Cámbialas o elimina las cuentas de prueba.</div>
+            <ul style={{ margin: "0 0 6px 18px", padding: 0 }}>
+              {securityIssues.map((w) => (
+                <li key={w.id}><strong>{w.email}</strong> — {w.role === "platform_admin" ? "administrador de plataforma (define ADMIN_EMAIL y ADMIN_PASSWORD en el servidor y reinícialo)" : `${w.tenantName || "centro"}: restablece su contraseña en “Centros y usuarios”`}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="dos-tabs">
           <div className={`dos-tab ${tab === "centros" ? "active" : ""}`} onClick={() => setTab("centros")}><Icon name="Building2" size={14} /> Centros y usuarios</div>
           <div className={`dos-tab ${tab === "integraciones" ? "active" : ""}`} onClick={() => setTab("integraciones")}><Icon name="Radio" size={14} /> Integraciones</div>
@@ -226,21 +242,28 @@ export default function PlatformAdminView({
             </div>
 
             {interopTenant ? (
-              <InteropView
-                studies={interopStudies}
-                orders={interopOrders}
-                patients={interopPatients}
-                diagnosticReports={interopReports}
-                integrationMessages={interopMessages}
-                onSimulate={(kind) => onSimulate(kind, interopTenantId)}
-                tenant={interopTenant}
-                canEditConnectors
-                onUpdateConnector={(patch) => onUpdateTenant(interopTenantId, { thirdPartyConnector: patch })}
-                onTestConnection={onTestConnection ? () => onTestConnection(interopTenantId) : undefined}
-                onGenerateInboundKey={onGenerateInboundKey ? () => onGenerateInboundKey(interopTenantId) : undefined}
-                onRetryMessage={onRetryMessage ? (messageId) => onRetryMessage(interopTenantId, messageId) : undefined}
-                onSendReport={onSendReport ? (reportId) => onSendReport(interopTenantId, reportId) : undefined}
-              />
+              <>
+                <ConnectionsPanel
+                  tenant={interopTenant}
+                  connections={connections}
+                  onCreate={(name, type) => onCreateConnection(interopTenantId, name, type)}
+                  onUpdate={(connectionId, patch) => onUpdateConnection(interopTenantId, connectionId, patch)}
+                  onDelete={(connectionId) => onDeleteConnection(interopTenantId, connectionId)}
+                  onTest={(connectionId) => onTestConnection(interopTenantId, connectionId)}
+                  onGenerateKey={(connectionId) => onGenerateConnectionKey(interopTenantId, connectionId)}
+                />
+                <div style={{ height: 16 }} />
+                <InteropView
+                  studies={interopStudies}
+                  orders={interopOrders}
+                  patients={interopPatients}
+                  diagnosticReports={interopReports}
+                  integrationMessages={interopMessages}
+                  connections={connections}
+                  onRetryMessage={onRetryMessage ? (messageId) => onRetryMessage(interopTenantId, messageId) : undefined}
+                  onSendReport={onSendReport ? (reportId) => onSendReport(interopTenantId, reportId) : undefined}
+                />
+              </>
             ) : (
               <div className="dos-empty"><Icon name="Building2" size={26} /><div>Todavía no hay centros registrados en la plataforma.</div></div>
             )}

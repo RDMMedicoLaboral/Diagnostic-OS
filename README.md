@@ -1,81 +1,59 @@
-# Diagnostic OS — Frontend (Fase 1)
+# Diagnostic OS — Frontend
 
-Prototipo de frontend para **Diagnostic OS**, una aplicación de laboratorio clínico
-multi-tenant con módulos de Laboratorio e Imágenes (RX y Ecografía), pensada para
-compartir resultados con otros sistemas (HIS / agendamiento) vía FHIR.
+Aplicación web de laboratorio clínico y centros de imágenes (RX y ecografía), multi-centro, con
+resultados compartibles con otros sistemas (HCE / HIS) vía FHIR R4.
 
-Esta es la **Fase 1**: solo frontend. Todos los datos viven en el `localStorage`
-del navegador (ver `src/lib/storage.js`) — no hay backend ni base de datos real
-todavía, y por lo tanto **no hay aislamiento de datos verdadero entre centros**,
-solo simulado en la interfaz.
+El frontend **no guarda datos**: habla con el backend (`Dx-backend`), que es quien los guarda en
+PostgreSQL y aísla la información de cada centro. La dirección del backend está en `src/config.js`.
 
-## Cómo correrlo
+## Páginas
+
+| Archivo | Qué es |
+|---|---|
+| `index.html` | La aplicación de cada centro (laboratorio, imágenes, pacientes, órdenes, integraciones) |
+| `admin.html` | Panel del administrador de la plataforma: centros, usuarios y conexión con sistemas externos |
+| `booking.html` | Reserva de citas en línea para pacientes |
+| `results.html` | Consulta de resultados para pacientes |
+
+## Primer uso
+
+El sistema arranca **vacío**: no incluye cuentas ni datos de demostración. El administrador de la
+plataforma se crea en el servidor con las variables `ADMIN_EMAIL` y `ADMIN_PASSWORD` (ver el README del
+backend). Desde `admin.html` se crean los centros y sus usuarios.
+
+## Desarrollo
 
 ```bash
 npm install
-npm run dev
+npm run dev          # abre http://localhost:5173 (usa el backend indicado en src/config.js)
 ```
 
-Abre la URL que muestra la terminal (normalmente `http://localhost:5173`).
-
-Cuentas de demostración (contraseña `demo123` para todas):
-
-| Correo                         | Centro               | Rol         |
-|---------------------------------|-----------------------|-------------|
-| pandrade@sanrafael.demo         | Lab San Rafael         | Dueño       |
-| floor@sanrafael.demo            | Lab San Rafael         | Laboratorista |
-| rcedeno@mantasalud.demo         | Manta Salud            | Dueño       |
-| ksolorzano@mantasalud.demo      | Manta Salud            | Radióloga   |
-| bmendoza@mantasalud.demo        | Manta Salud            | Tecnólogo RX |
-
-## Estructura del proyecto
+## Estructura
 
 ```
 src/
-  main.jsx              Punto de entrada de React
-  App.jsx                Componente raíz: enruta las vistas y conecta el estado
-  styles.css              Todos los estilos de la aplicación
-  lib/
-    format.js             Utilidades (ids, fechas, iniciales)
-    fhir.js                Traduce un examen a un recurso FHIR (DiagnosticReport / ImagingStudy)
-    storage.js             ⭐ Capa de datos — el único archivo a reemplazar en la Fase 2
-  data/
-    constants.js           Metadatos (tipos de examen, roles) y datos de demostración
-  hooks/
-    useDiagnosticData.js   Hook central de estado de la aplicación
-  components/
-    Icon.jsx                Íconos propios en SVG (sin dependencias externas)
-    common.jsx               TypePill, StatusBadge, ExamTable
-    LoginScreen.jsx           Login + registro de nuevo centro
-    Sidebar.jsx               Navegación + cuenta activa
-    PulseStrip.jsx            Indicador visual de sincronización con el HIS
-    Dashboard.jsx             Panel general
-    PatientsView.jsx          Módulo de pacientes
-    TeamView.jsx               Módulo de equipo/roles
-    LabView.jsx                 Módulo de laboratorio
-    ImagingView.jsx             Módulo de imágenes (RX/Ecografía)
-    InteropView.jsx             Módulo de interoperabilidad (FHIR saliente + citas entrantes)
-    modals/
-      NewOrderModal.jsx          Modal de nueva orden
-      ExamDetailModal.jsx        Modal de resultados/hallazgos
+  main.jsx, admin/main.jsx, booking/main.jsx   Puntos de entrada de cada página
+  App.jsx                    Aplicación de un centro
+  admin/AdminApp.jsx         Panel de administrador
+  config.js                  URL del backend
+  lib/api.js                 Cliente HTTP del backend (token de sesión)
+  hooks/useRemoteData.js     Carga y guarda el estado del centro en el servidor
+  components/                Vistas (laboratorio, imágenes, pacientes, integraciones, etc.)
+  data/                      Catálogos y constantes
 ```
 
-## Hoja de ruta — Fase 2 (backend)
+## ⚠ Cómo publicar cambios (léelo antes de subir nada a GitHub)
 
-Cuando pasemos a construir el backend, los cambios se concentran en pocos lugares:
+GitHub Pages publica los archivos **tal cual están en el repositorio** y **no compila**. Los `index.html`,
+`admin.html` y `booking.html` de la raíz son archivos YA COMPILADOS (un solo archivo con todo adentro). Por eso,
+**subir solo la carpeta `src/` no cambia nada en el sitio**.
 
-1. **`src/lib/storage.js`** — reemplazar las funciones `loadData`/`saveData` por
-   llamadas `fetch()` a la API real, con el token de sesión en las cabeceras.
-2. **`src/components/LoginScreen.jsx`** — el login deja de comparar contraseñas
-   en el navegador y pasa a llamar a un endpoint `/api/auth/login` que devuelve
-   un token (JWT o de sesión).
-3. **Aislamiento real de tenants** — se implementa en la base de datos
-   (columna `tenant_id` + verificación en cada consulta del backend), no en el
-   frontend. El frontend seguirá funcionando igual: solo pide "mis datos" y el
-   servidor decide qué es "mío".
-4. **`src/lib/fhir.js`** — se reutiliza tal cual; es la pieza que ya arma el
-   recurso FHIR correcto para enviarlo al sistema de agendamiento/HIS.
+Después de modificar algo en `src/`:
 
-El resto de los componentes (vistas, modales, hook de datos) no debería
-necesitar cambios grandes, porque ya están separados de cómo se guardan los
-datos.
+```
+npm install            # solo la primera vez
+npm run build:pages    # genera release/index.html, release/admin.html y release/booking.html
+```
+
+y sube los HTML de `release/` a la **raíz** del repositorio, reemplazando los anteriores. En 1–2 minutos el
+sitio se actualiza (recarga con Ctrl+Shift+R).

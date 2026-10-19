@@ -30,6 +30,7 @@ export function useRemoteData() {
   const [catalog, setCatalog] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [integrationMessages, setIntegrationMessages] = useState([]);
+  const [connections, setConnections] = useState([]); // clínicas conectadas a este centro (solo nombre y estado)
   const [auditEvents, setAuditEvents] = useState([]);
 
   const [loaded, setLoaded] = useState(false); // true una vez que cargó el estado inicial tras el login
@@ -56,6 +57,7 @@ export function useRemoteData() {
     setCatalog(data.catalog || []);
     setAppointments(data.appointments || []);
     setIntegrationMessages(data.integrationMessages || []);
+    setConnections(data.connections || []);
     setAuditEvents(data.auditEvents || []);
   };
 
@@ -155,6 +157,6 @@ export function useRemoteData() {
     appointments, setAppointments,
     integrationMessages, setIntegrationMessages,
     auditEvents, setAuditEvents,
-    loaded, refresh, refreshIfIdle, syncError,
+    connections, loaded, refresh, refreshIfIdle, syncError,
   };
 }

@@ -29,12 +29,6 @@ export default function LoginScreen({ onLogin, loginError, loggingIn }) {
           <button className="dos-btn dos-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submitLogin} disabled={loggingIn}>
             {loggingIn ? "Ingresando…" : "Ingresar"}
           </button>
-          <div className="dos-login-hint">
-            Cuentas de demostración (misma contraseña <code>demo123</code>):<br />
-            <code>pandrade@sanrafael.demo</code> — Dueño, Lab San Rafael<br />
-            <code>rcedeno@mantasalud.demo</code> — Dueño, Manta Salud<br />
-            <code>ksolorzano@mantasalud.demo</code> — Radióloga, Manta Salud
-          </div>
         </div>
 
         <div className="dos-isolation-note">

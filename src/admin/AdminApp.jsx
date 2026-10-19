@@ -24,15 +24,22 @@ export default function AdminApp() {
 
   // Snapshot del centro que se está mirando en la pestaña "Integraciones".
   const [interopTenantId, setInteropTenantId] = useState(null);
+  const [connections, setConnections] = useState([]); // conexiones (clínicas) del centro que se está inspeccionando
+  const [weakAccounts, setWeakAccounts] = useState([]); // cuentas con contraseña de demostración pública
   const [snapshot, setSnapshot] = useState({ patients: [], orders: [], studies: [], diagnosticReports: [], integrationMessages: [] });
 
   const loadTenantsAndUsers = useCallback(async () => {
     setLoadingData(true);
     setDataError("");
     try {
-      const [t, u] = await Promise.all([api.get("/api/admin/tenants"), api.get("/api/admin/users")]);
+      const [t, u, sec] = await Promise.all([
+        api.get("/api/admin/tenants"),
+        api.get("/api/admin/users"),
+        api.get("/api/admin/security-check").catch(() => ({ weakAccounts: [] })), // el aviso nunca debe impedir cargar el panel
+      ]);
       setTenants(t);
       setAllUsers(u);
+      setWeakAccounts(sec.weakAccounts || []);
       if (!interopTenantId && t[0]) setInteropTenantId(t[0].id);
     } catch (err) {
       setDataError(err.message);
@@ -46,6 +53,8 @@ export default function AdminApp() {
   useEffect(() => {
     if (!adminUser || !interopTenantId) return;
     api.get(`/api/admin/tenants/${interopTenantId}/snapshot`).then(setSnapshot).catch(() => {});
+    setConnections([]);
+    api.get(`/api/admin/tenants/${interopTenantId}/connections`).then(setConnections).catch(() => {});
   }, [adminUser, interopTenantId]);
 
   const submitLogin = async () => {
@@ -97,22 +106,28 @@ export default function AdminApp() {
     } catch (err) { setDataError(err.message); }
   };
 
-  const simulateIntegration = async (kind, targetTenantId) => {
-    try {
-      await api.post(`/api/admin/tenants/${targetTenantId}/integrations/simulate`, { kind });
-      const snap = await api.get(`/api/admin/tenants/${targetTenantId}/snapshot`);
-      setSnapshot(snap);
-    } catch (err) { setDataError(err.message); }
-  };
-
   const reloadSnapshot = async (tenantId) => setSnapshot(await api.get(`/api/admin/tenants/${tenantId}/snapshot`));
 
-  // Conexión con el sistema externo (HCE / Clinic-OS). Los errores se devuelven al panel de
-  // integraciones, que los muestra junto al botón que los provocó.
-  const testConnection = (tenantId) => api.post(`/api/admin/tenants/${tenantId}/integrations/test`);
-  const generateInboundKey = async (tenantId) => {
-    const r = await api.post(`/api/admin/tenants/${tenantId}/integrations/inbound-key`);
-    await loadTenantsAndUsers(); // para que el panel sepa que ya hay una clave activa
+  // Conexiones del laboratorio con sus clínicas. Los errores vuelven al panel, que los muestra junto al botón que los provocó.
+  const reloadConnections = async (tenantId) => setConnections(await api.get(`/api/admin/tenants/${tenantId}/connections`));
+  const createConnection = async (tenantId, name, type) => {
+    const c = await api.post(`/api/admin/tenants/${tenantId}/connections`, { name, type });
+    await reloadConnections(tenantId);
+    return c;
+  };
+  const updateConnection = async (tenantId, connectionId, patch) => {
+    const c = await api.patch(`/api/admin/tenants/${tenantId}/connections/${connectionId}`, patch);
+    await reloadConnections(tenantId);
+    return c;
+  };
+  const deleteConnection = async (tenantId, connectionId) => {
+    await api.delete(`/api/admin/tenants/${tenantId}/connections/${connectionId}`);
+    await reloadConnections(tenantId);
+  };
+  const testConnection = (tenantId, connectionId) => api.post(`/api/admin/tenants/${tenantId}/connections/${connectionId}/test`);
+  const generateConnectionKey = async (tenantId, connectionId) => {
+    const r = await api.post(`/api/admin/tenants/${tenantId}/connections/${connectionId}/inbound-key`);
+    await reloadConnections(tenantId); // para que el panel sepa que ya hay una clave activa
     return r;
   };
   const retryMessage = async (tenantId, messageId) => {
@@ -136,7 +151,7 @@ export default function AdminApp() {
                 <p className="dos-login-sub">Panel de administrador de la plataforma</p>
               </div>
             </div>
-            <div className="dos-field"><label>Correo</label><input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="soporte@diagnosticos.app" /></div>
+            <div className="dos-field"><label>Correo</label><input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="correo del administrador" /></div>
             <div className="dos-field"><label>Contraseña</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" onKeyDown={(e) => e.key === "Enter" && submitLogin()} /></div>
             {error && <div style={{ color: "var(--red)", fontSize: 12.5, marginBottom: 8 }}>{error}</div>}
             <button className="dos-btn dos-btn-primary" style={{ width: "100%", justifyContent: "center" }} onClick={submitLogin} disabled={loggingIn}>
@@ -179,9 +194,13 @@ export default function AdminApp() {
         allPatients={snapshot.patients}
         allDiagnosticReports={snapshot.diagnosticReports}
         allIntegrationMessages={snapshot.integrationMessages}
-        onSimulate={simulateIntegration}
+        securityIssues={weakAccounts.map((w) => ({ ...w, tenantName: tenants.find((t) => t.id === w.tenantId)?.name || null }))}
+        connections={connections}
+        onCreateConnection={createConnection}
+        onUpdateConnection={updateConnection}
+        onDeleteConnection={deleteConnection}
         onTestConnection={testConnection}
-        onGenerateInboundKey={generateInboundKey}
+        onGenerateConnectionKey={generateConnectionKey}
         onRetryMessage={retryMessage}
         onSendReport={sendReport}
         onLogout={handleLogout}
